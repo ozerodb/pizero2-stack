@@ -3,12 +3,12 @@
 
 # ── Alerting ──────────────────────────────────────────────────────────────────
 # Replace placeholders with your actual Tailscale hostname, Ntfy port, and
-# publisher password (NTFY_PUBLISH_PASSWORD from docker/.env).
+# publish password (NTFY_PUBLISH_PASSWORD from firstboot.conf).
 alerting:
   ntfy:
-    url: "https://<pi-hostname>:<NTFY_PORT>"
+    url: "http://ntfy:80"
     topic: "uptime"
-    username: "publisher"
+    username: "ntfypub"
     password: "<NTFY_PUBLISH_PASSWORD>"
     default-alert:
       description: "health check failed"
@@ -17,17 +17,7 @@ alerting:
       success-threshold: 2
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
-# Add one entry per service you want to monitor.
-# Example: monitor a service on your RPi5 via its Tailscale IP or hostname.
 endpoints:
-  - name: example-service
-    url: "https://<rpi5-hostname>:<port>/health"
-    interval: 1m
-    conditions:
-      - "[STATUS] == 200"
-    alerts:
-      - type: ntfy
-
   - name: ntfy
     url: "http://ntfy:80"
     interval: 1m
@@ -35,3 +25,28 @@ endpoints:
       - "[STATUS] == 200"
     alerts:
       - type: ntfy
+
+  - name: internet (Cloudflare)
+    url: "https://1.1.1.1"
+    interval: 5m
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: ntfy
+
+  - name: internet (Google)
+    url: "https://www.google.com"
+    interval: 5m
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: ntfy
+
+# ── Additional endpoints (examples — uncomment and fill in) ───────────────────
+#  - name: my-service
+#    url: "https://<tailscale-hostname>:<port>/health"
+#    interval: 1m
+#    conditions:
+#      - "[STATUS] == 200"
+#    alerts:
+#      - type: ntfy

@@ -38,20 +38,23 @@ if [[ -d "$REPO_DIR/.git" ]]; then
 else
     log "Cloning ${REPO_URL}…"
     git clone "${REPO_URL}" "${REPO_DIR}" || fail "git clone failed."
+    chown -R dietpi:dietpi "${REPO_DIR}"
 fi
 
 # Install env files from boot partition (copied from system/firstboot/out/ to SD card)
-SYSTEM_ENV_SRC="/boot/system_env"
-DOCKER_ENV_SRC="/boot/docker_env"
+SYSTEM_ENV_SRC="/boot/firmware/system_env"
+DOCKER_ENV_SRC="/boot/firmware/docker_env"
 
 [[ -f "${SYSTEM_ENV_SRC}" ]] || fail "system_env not found at ${SYSTEM_ENV_SRC} — copy it from system/firstboot/out/ to the SD card."
 [[ -f "${DOCKER_ENV_SRC}" ]] || fail "docker_env not found at ${DOCKER_ENV_SRC} — copy it from system/firstboot/out/ to the SD card."
 
 cp "${SYSTEM_ENV_SRC}" "${REPO_DIR}/system/.env"
+chown "${DIETPI_USER}:${DIETPI_USER}" "${REPO_DIR}/system/.env"
 chmod 600 "${REPO_DIR}/system/.env"
 log "system/.env installed from ${SYSTEM_ENV_SRC}."
 
 cp "${DOCKER_ENV_SRC}" "${REPO_DIR}/docker/.env"
+chown "${DIETPI_USER}:${DIETPI_USER}" "${REPO_DIR}/docker/.env"
 chmod 600 "${REPO_DIR}/docker/.env"
 log "docker/.env installed from ${DOCKER_ENV_SRC}."
 
@@ -102,6 +105,14 @@ log "Pulling and starting Docker stack…"
 cd "${REPO_DIR}/docker"
 docker compose pull  || fail "docker compose pull failed."
 docker compose up -d || fail "docker compose up failed."
+
+# Grant ntfypub write-only access to all topics.
+# ntfypub has role 'user' (not admin) — needs explicit ACL since default is deny-all.
+log "Granting ntfypub write access to ntfy topics…"
+for _i in $(seq 1 10); do
+    docker exec ntfy ntfy access ntfypub '*' write-only 2>/dev/null && break
+    sleep 3
+done
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 TS_HOSTNAME=$(tailscale status --json 2>/dev/null | python3 -c "

@@ -82,7 +82,7 @@ Required values:
 | `SSH_PORT` | Non-standard SSH port (1024–65535) |
 | `TAILSCALE_AUTHKEY` | From [Tailscale admin](https://login.tailscale.com/admin/settings/keys) — enables full automation |
 | `NTFY_ADMIN_PASSWORD` | Password for the `ntfyadmin` account (app login) |
-| `NTFY_PUBLISH_PASSWORD` | Password for the `publisher` account used by scripts (≥16 chars, `openssl rand -hex 24`) |
+| `NTFY_PUBLISH_PASSWORD` | Password for the `ntfypub` account used by scripts (≥16 chars, `openssl rand -hex 24`) |
 
 ### Step 3 — Generate and validate boot files
 
@@ -134,9 +134,9 @@ nano ~/docker/config/gatus/config.yaml
 docker compose -f ~/pizero2-stack/docker/docker-compose.yml restart gatus
 ```
 
-Fill in your Tailscale hostname, Ntfy port, and `NTFY_PUBLISH_PASSWORD`. Add endpoints for the services you want to monitor.
+Fill in `NTFY_PUBLISH_PASSWORD` and add endpoints for the services you want to monitor.
 
-**Container networking note:** to monitor Ntfy from Gatus (same Pi), use `http://ntfy:80` — Docker resolves the container name on the shared bridge network. Use Tailscale HTTPS URLs for services on other machines (e.g. RPi5).
+**Container networking:** Gatus runs inside Docker and cannot reach Tailscale hostnames. Always use `http://ntfy:80` for the ntfy alerting URL — Docker resolves the container name on the shared bridge network. Use Tailscale HTTPS URLs only for endpoints on other machines (e.g. RPi5).
 
 ---
 
@@ -159,12 +159,12 @@ docker compose -f ~/pizero2-stack/docker/docker-compose.yml up -d ntfy
 
 ### Sending notifications from scripts
 
-ntfy creates a `publisher` user at startup (admin role) whose password is `NTFY_PUBLISH_PASSWORD` from `firstboot.conf`.
+ntfy creates a `ntfypub` user at startup (admin role) whose password is `NTFY_PUBLISH_PASSWORD` from `firstboot.conf`.
 
 **From the Pi Zero 2:**
 
 ```bash
-curl -u "publisher:${NTFY_PUBLISH_PASSWORD}" \
+curl -u "ntfypub:${NTFY_PUBLISH_PASSWORD}" \
      -d "your message" \
      "http://localhost:${NTFY_PORT}/your-topic"
 ```
@@ -172,7 +172,7 @@ curl -u "publisher:${NTFY_PUBLISH_PASSWORD}" \
 **From other tailnet devices (e.g. RPi5):**
 
 ```bash
-curl -u "publisher:${NTFY_PUBLISH_PASSWORD}" \
+curl -u "ntfypub:${NTFY_PUBLISH_PASSWORD}" \
      -d "your message" \
      "https://<pi-hostname>:${NTFY_PORT}/your-topic"
 ```

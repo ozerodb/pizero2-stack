@@ -8,6 +8,10 @@
 #
 # This file is gitignored — it contains secrets. Back it up securely.
 # Never commit system/firstboot/firstboot.conf.
+#
+# QUOTING: wrap values containing #, spaces, or special characters in single quotes.
+#   Good: SOME_PASSWORD='my#p@ss w0rd!'
+#   Bad:  SOME_PASSWORD=my#p@ss w0rd!   ← # and beyond silently treated as comment
 
 # ── Identity ──────────────────────────────────────────────────────────────────
 HOSTNAME=pi-node
@@ -50,8 +54,8 @@ TAILSCALE_AUTHKEY=
 # Username is fixed: ntfyadmin.
 NTFY_ADMIN_PASSWORD=CHANGE_ME_PASSWORD
 
-# Publisher password — hashed by prepare_firstboot.py → NTFY_PUBLISH_HASH in docker.env.
-# Username is fixed: publisher. Used by scripts to send notifications.
+# Publish password — hashed by prepare_firstboot.py → NTFY_PUBLISH_HASH in docker.env.
+# Username is fixed: ntfypub. Used by scripts to send notifications (write-only access).
 # Generate: openssl rand -hex 24
 NTFY_PUBLISH_PASSWORD=CHANGE_ME_16_CHARS_MIN
 
