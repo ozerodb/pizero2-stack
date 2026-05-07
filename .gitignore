@@ -1,0 +1,21 @@
+# User firstboot config — contains secrets (passwords, SSH key, Tailscale authkey)
+system/firstboot/firstboot.conf
+
+# Generated boot files — contain rendered secrets, copy to SD card
+system/firstboot/out/
+
+# Host env — contains secrets
+system/.env
+
+# Docker env — contains secrets
+docker/.env
+
+# DietPi / macOS cruft
+.DS_Store
+Thumbs.db
+
+# Runtime config/data (populated at runtime by Automation_Custom_Script.sh)
+docker/config/
+
+# Logs
+*.log

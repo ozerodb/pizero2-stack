@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# Automation_Custom_Script.sh — Fully automated first-boot provisioning.
+#
+# DO NOT copy this file to the SD card directly.
+# Run: python3 system/firstboot/prepare_firstboot.py
+# The rendered version (system/firstboot/out/Automation_Custom_Script.sh) has {{REPO_URL}} substituted.
+#
+# This script runs automatically at the end of DietPi first-boot setup.
+# Log: /var/tmp/system/firstboot/logs/dietpi-automation_custom_script.log
+set -euo pipefail
+
+REPO_URL="{{REPO_URL}}"
+REPO_DIR="/home/dietpi/pizero2-stack"
+LOG="/var/tmp/dietpi/logs/pizero2-provision.log"
+
+mkdir -p "$(dirname "${LOG}")"
+
+log()  { echo "[$(date '+%H:%M:%S')] $*" | tee -a "${LOG}"; }
+fail() { log "ERROR: $*"; exit 1; }
+
+log "=== pizero2 provisioning started ==="
+
+# Verify pre-installed tools (AUTO_SETUP_INSTALL_SOFTWARE_ID in dietpi.txt)
+for _cmd in git docker tailscale fail2ban-server; do
+    command -v "$_cmd" &>/dev/null \
+        || fail "${_cmd} not found — check AUTO_SETUP_INSTALL_SOFTWARE_ID in dietpi.txt."
+done
+
+# Add dietpi user to docker group
+if id dietpi &>/dev/null; then
+    usermod -aG docker dietpi
+    log "User 'dietpi' added to docker group."
+fi
+
+# Clone repo
+if [[ -d "$REPO_DIR/.git" ]]; then
+    log "Repo already present at ${REPO_DIR} — skipping clone."
+else
+    log "Cloning ${REPO_URL}…"
+    git clone "${REPO_URL}" "${REPO_DIR}" || fail "git clone failed."
+fi
+
+# Install env files from boot partition (copied from system/firstboot/out/ to SD card)
+SYSTEM_ENV_SRC="/boot/system_env"
+DOCKER_ENV_SRC="/boot/docker_env"
+
+[[ -f "${SYSTEM_ENV_SRC}" ]] || fail "system_env not found at ${SYSTEM_ENV_SRC} — copy it from system/firstboot/out/ to the SD card."
+[[ -f "${DOCKER_ENV_SRC}" ]] || fail "docker_env not found at ${DOCKER_ENV_SRC} — copy it from system/firstboot/out/ to the SD card."
+
+cp "${SYSTEM_ENV_SRC}" "${REPO_DIR}/system/.env"
+chmod 600 "${REPO_DIR}/system/.env"
+log "system/.env installed from ${SYSTEM_ENV_SRC}."
+
+cp "${DOCKER_ENV_SRC}" "${REPO_DIR}/docker/.env"
+chmod 600 "${REPO_DIR}/docker/.env"
+log "docker/.env installed from ${DOCKER_ENV_SRC}."
+
+# ── Provisioning steps ─────────────────────────────────────────────────────────
+log "Configuring firewall…"
+bash "${REPO_DIR}/system/scripts/configure_firewall.sh" "${REPO_DIR}/system/.env" \
+    || fail "configure_firewall.sh failed."
+
+log "Hardening SSH…"
+bash "${REPO_DIR}/system/scripts/configure_ssh.sh" "${REPO_DIR}/system/.env" \
+    || fail "configure_ssh.sh failed."
+
+log "Configuring fail2ban…"
+bash "${REPO_DIR}/system/scripts/configure_fail2ban.sh" "${REPO_DIR}/system/.env" \
+    || fail "configure_fail2ban.sh failed."
+
+log "Setting up Tailscale…"
+bash "${REPO_DIR}/system/scripts/configure_tailscale.sh" \
+    "${REPO_DIR}/system/.env" \
+    "${REPO_DIR}/docker/.env" \
+    || fail "configure_tailscale.sh failed."
+
+# ── Runtime directories ────────────────────────────────────────────────────────
+DOCKER_ENV="${REPO_DIR}/docker/.env"
+CONFIG_ROOT=$(grep -m1 '^CONFIG_ROOT=' "${DOCKER_ENV}" | cut -d= -f2- | tr -d "\"'" | xargs)
+CONFIG_ROOT="${CONFIG_ROOT:-/home/dietpi/docker/config}"
+DIETPI_USER=$(grep -m1 '^DIETPI_USER=' "${REPO_DIR}/system/.env" | cut -d= -f2- | tr -d "\"'" | xargs)
+DIETPI_USER="${DIETPI_USER:-dietpi}"
+
+log "Creating runtime directories under ${CONFIG_ROOT}…"
+mkdir -p "${CONFIG_ROOT}/gatus"
+mkdir -p "${CONFIG_ROOT}/ntfy/cache"
+mkdir -p "${CONFIG_ROOT}/ntfy/data"
+
+GATUS_CONFIG="${CONFIG_ROOT}/gatus/config.yaml"
+GATUS_EXAMPLE="${REPO_DIR}/docker/gatus.yaml.example"
+if [[ ! -f "${GATUS_CONFIG}" && -f "${GATUS_EXAMPLE}" ]]; then
+    cp "${GATUS_EXAMPLE}" "${GATUS_CONFIG}"
+    chmod 600 "${GATUS_CONFIG}"
+    log "Gatus starter config copied to ${GATUS_CONFIG} — edit it to add your endpoints."
+fi
+
+chown -R "${DIETPI_USER}:${DIETPI_USER}" "${CONFIG_ROOT}"
+chmod 750 "${CONFIG_ROOT}"
+
+# ── Docker stack ───────────────────────────────────────────────────────────────
+log "Pulling and starting Docker stack…"
+cd "${REPO_DIR}/docker"
+docker compose pull  || fail "docker compose pull failed."
+docker compose up -d || fail "docker compose up failed."
+
+# ── Summary ────────────────────────────────────────────────────────────────────
+TS_HOSTNAME=$(tailscale status --json 2>/dev/null | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    print(d.get('Self', {}).get('DNSName', '<pi-hostname>').rstrip('.'))
+except Exception:
+    print('<pi-hostname>')
+" 2>/dev/null || echo "<pi-hostname>")
+
+GATUS_PORT=$(grep -m1 '^GATUS_PORT=' "${DOCKER_ENV}" | cut -d= -f2- | xargs || echo "8080")
+NTFY_PORT=$(grep -m1 '^NTFY_PORT='  "${DOCKER_ENV}" | cut -d= -f2- | xargs || echo "2586")
+
+log "=== Provisioning complete ==="
+log "  Gatus:        https://${TS_HOSTNAME}:${GATUS_PORT}"
+log "  Ntfy:         https://${TS_HOSTNAME}:${NTFY_PORT}"
+log "  Gatus config: ${GATUS_CONFIG}"
+log "  To restart Gatus after editing config:"
+log "    docker compose -f ${REPO_DIR}/docker/docker-compose.yml restart gatus"
+log "Full log: ${LOG}"

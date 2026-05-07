@@ -1,0 +1,37 @@
+# Gatus configuration — copy to ${CONFIG_ROOT}/gatus/config.yaml
+# Full docs: https://github.com/TwinProduction/gatus
+
+# ── Alerting ──────────────────────────────────────────────────────────────────
+# Replace placeholders with your actual Tailscale hostname, Ntfy port, and
+# publisher password (NTFY_PUBLISH_PASSWORD from docker/.env).
+alerting:
+  ntfy:
+    url: "https://<pi-hostname>:<NTFY_PORT>"
+    topic: "uptime"
+    username: "publisher"
+    password: "<NTFY_PUBLISH_PASSWORD>"
+    default-alert:
+      description: "health check failed"
+      send-on-resolved: true
+      failure-threshold: 3
+      success-threshold: 2
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+# Add one entry per service you want to monitor.
+# Example: monitor a service on your RPi5 via its Tailscale IP or hostname.
+endpoints:
+  - name: example-service
+    url: "https://<rpi5-hostname>:<port>/health"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: ntfy
+
+  - name: ntfy
+    url: "http://ntfy:80"
+    interval: 1m
+    conditions:
+      - "[STATUS] == 200"
+    alerts:
+      - type: ntfy
